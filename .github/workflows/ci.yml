@@ -1,0 +1,96 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+    working-directory: auditauthor
+
+jobs:
+  quality:
+    name: Tests and lint
+    if: >-
+      github.event_name != 'schedule' &&
+      (github.event_name != 'push' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@6b9c6063abd6010835644d4c2e1bef4cf5cd0fca # v6.0.1
+        with:
+          version: '0.12.3'
+          python-version: '3.11'
+          enable-cache: false
+      - run: uv sync --locked
+      - name: Lint
+        run: uv run --frozen ruff check .
+      - name: Unit tests
+        run: uv run --frozen pytest tests/unit -q
+
+  security:
+    name: Code and dependency security
+    if: >-
+      (github.event_name != 'push' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@6b9c6063abd6010835644d4c2e1bef4cf5cd0fca # v6.0.1
+        with:
+          version: '0.12.3'
+          python-version: '3.11'
+          enable-cache: false
+      - run: uv sync --locked --group security
+      - name: Python security (medium and high severity)
+        run: |
+          uv run --frozen --group security bandit -r src -ll -f json -o "$RUNNER_TEMP/bandit.json" || { cat "$RUNNER_TEMP/bandit.json"; exit 1; }
+          uv run --frozen python -c 'import json, sys; r = json.load(open(sys.argv[1])); assert not r["errors"], r["errors"]; assert r["metrics"]["_totals"]["loc"] > 0' "$RUNNER_TEMP/bandit.json"
+      - name: Export locked runtime, development and security dependencies
+        run: uv export --frozen --all-groups --no-emit-project --output-file "$RUNNER_TEMP/audit-requirements.txt" --quiet
+      - name: Audit dependencies
+        id: dependency_audit
+        continue-on-error: true
+        run: uv run --frozen --group security pip-audit --strict --disable-pip --no-deps --format json --desc off --output "$RUNNER_TEMP/pip-audit.json" -r "$RUNNER_TEMP/audit-requirements.txt"
+
+  secrets:
+    name: Secret scan
+    if: >-
+      (github.event_name != 'push' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    defaults:
+      run:
+        shell: bash
+        working-directory: .
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install free Gitleaks CLI
+        env:
+          GITLEAKS_VERSION: '8.24.3'
+        run: |
+          cd "$RUNNER_TEMP"
+          base="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}"
+          archive="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl --fail --silent --show-error --location "$base/$archive" -o "$archive"
+          echo "9991e0b2903da4c8f6122b5c3186448b927a5da4deef1fe45271c3793f4ee29c  $archive" | sha256sum --check --strict
+          tar -xzf "$archive" gitleaks
+      - name: Scan Git history (redact findings)
+        run: '"$RUNNER_TEMP/gitleaks" git --redact --log-opts="--all" .'

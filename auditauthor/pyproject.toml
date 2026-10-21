@@ -1,16 +1,34 @@
 [project]
 name = "auditauthor"
 version = "0.1.0"
-description = "Add your description here"
+description = "Evidence-backed analysis of AGO technology audit observations"
 readme = "README.md"
 authors = [
     { name = "ongkangrui", email = "ongkangrui@gmail.com" }
 ]
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "fastapi>=0.115,<1", "uvicorn>=0.34,<1", "python-multipart>=0.0.20,<1",
+    "pydantic-settings>=2.8,<3", "pymupdf>=1.25,<2", "litellm>=1.63,<2",
+    "httpx>=0.28,<1", "streamlit>=1.49,<2", "streamlit-pdf>=1,<2",
+    "python-dotenv>=1,<2",
+]
+
+[dependency-groups]
+dev = ["pytest>=8,<10", "ruff>=0.11,<1"]
+security = [
+    "bandit>=1.8,<2",
+    "pip-audit>=2.9,<3",
+]
 
 [project.scripts]
-auditauthor = "auditauthor:main"
+auditauthor = "auditauthor.cli:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
 
 [build-system]
 requires = ["uv_build>=0.12.3,<0.13.0"]

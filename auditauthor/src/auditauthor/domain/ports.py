@@ -1,0 +1,16 @@
+from typing import Protocol
+
+from pydantic import BaseModel
+
+
+class ModelClient(Protocol):
+    def generate(
+        self, system: str, content: str, schema: type[BaseModel], model: str
+    ) -> tuple[BaseModel, str]: ...
+
+
+class AnalysisStore(Protocol):
+    def get_report(self, report_id: str) -> dict | None: ...
+    def get_job(self, job_id: str) -> dict | None: ...
+    def save_job(self, job: dict) -> None: ...
+    def next_job(self) -> dict | None: ...
