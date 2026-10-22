@@ -192,3 +192,12 @@ LLM gateway currently only supports OpenAI models. A proper LLM gateway implemen
 
 ### Indexing and Vector Database Improvement
 Using an embedding model to embed chunks into vector database instead of using SQLite. This allows for further insights to be supported if auditors require, via Retrieval Augemented Generation (RAG), and vastly speeds up retrieval due to vector search.
+
+## Cross Report Insights
+<img width="1837" height="843" alt="Screen 1" src="https://github.com/user-attachments/assets/0a7aaff2-e58c-40f3-a01b-0132a557bbc8" />
+
+## Structured Output: Observations with theme, agency involved, identified risks and remediation
+<img width="960" height="707" alt="Screen 2" src="https://github.com/user-attachments/assets/8c476aca-1eed-4910-a7c3-c9501bf14d62" />
+
+## Source Evidence for observations and insights 
+<img width="921" height="697" alt="Screen 3" src="https://github.com/user-attachments/assets/7d7b1f4b-6636-4e76-bf30-a007c38b34ce" />
