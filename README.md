@@ -98,7 +98,7 @@ theme rather than silently truncating evidence.
 
 ## Continuous integration
 
-The root [GitHub Actions workflow](../.github/workflows/ci.yml) runs on pull
+The root [GitHub Actions workflow](.github/workflows/ci.yml) runs on pull
 requests, default-branch pushes and manual dispatch. Feature-branch pushes without a pull request
 create skipped runs; the default branch is detected from GitHub metadata.
 
@@ -127,55 +127,68 @@ Scanner failures and incomplete reports still fail the security job.
 
 ## Solution and AI approach
 
-Process all extractable text in overlapping character windows, retaining physical
-page references and preceding-page context. Context includes headings as source
-text; no heuristic assigns one agency to an entire page. This deliberately favors
-coverage over keyword-only selection.
+AuditAuthor uses AI to read and organize report text, while ordinary Python code
+controls file identity, page references, validation, counting and job state:
 
-The extraction prompt separates actual weaknesses from good practices and reported
-remediation. It requires nullable agency/system fields, a fixed IT-control taxonomy,
-and exact source excerpts. Pydantic checks shape; deterministic validation checks
-every quote against both the original page and the model's input. Unsupported
-quotations are excluded and make the run partial. This does **not** automatically
-prove the interpretation, agency attribution or stated risk is correct.
+```text
+PDF -> PyMuPDF page text -> overlapping chunks -> AI extraction
+    -> exact evidence checks -> duplicate removal -> AI consolidation
+    -> Python-calculated recurrence and review insights
+```
 
-Consolidation runs by theme over validated observations. The model proposes specific
-weakness groups and same-report duplicates; code validates references and boundaries,
-prefers detailed findings and calculates distinct-report/agency counts. Recurrence
-means the weakness appears in at least two distinct report hashes. Cross-agency
-themes and repeated agency/system findings are shown separately. Evidence-backed
-audit implications are suggestions for review, not established conclusions.
+PyMuPDF stores digital text with one-based physical PDF page numbers. Reports are
+split into overlapping character windows, including the preceding page tail as
+context. This supports findings that cross chunk boundaries and considers all
+extractable text rather than relying on keywords. Image-dominant pages are flagged;
+scanned-only PDFs are rejected because OCR is not part of v1.
 
-Requests have timeouts and bounded retries for transient errors or invalid structured
-output. Jobs and successful chunks persist. A failed chunk can be retried without
-rerunning completed chunks; dependent consolidation is recalculated when extraction
-changes. A failed consolidation can be retried using saved extraction. Interrupted
-jobs are marked on backend restart; queued jobs resume automatically.
+Each chunk is sent through LiteLLM to the configured model with a versioned prompt
+and strict Pydantic JSON schema. The model identifies actual IT-control weaknesses,
+including technology issues outside an ``IT`` heading, and returns a theme, weakness,
+optional agency/system, optional reported risk/remediation, and literal page
+excerpts. It must use ``null`` for unsupported facts and cannot invent severity,
+impact, recurrence or resolution status. Timeouts and bounded retries handle
+transient provider failures; model, prompt and schema provenance is retained.
 
-## Assumptions, challenges and limitations
+Application code verifies every excerpt against both the stated physical PDF page
+and the chunk supplied to the model (normalizing whitespace only). Invalid quotes
+are rejected, while valid observations remain reviewable. This proves quotation
+integrity, not semantic correctness or attribution, which still require auditor
+review. Overlapping chunks are deduplicated only when report, agency, system, theme,
+title and evidence match, so distinct sub-findings are preserved.
 
-- Local single-auditor use, public digital-text PDFs, hosted OpenAI access and a
-  bounded assessment corpus. No authentication, OCR, chat, vector database, reviewer
-  edits, budget feature or production operations layer.
-- Physical page numbers avoid malformed PDF labels and changing printed-page offsets.
-- Overlap and preceding-page context reduce split findings but do not guarantee long
-  distance agency attribution. Unknown attribution should remain null.
-- Conservative exact deduplication plus model-proposed same-event deduplication
-  reduces repetition, but semantic merging needs review. Entity counts use exact
-  extracted names, so aliases may split counts.
-- Image-dominant sparse pages are flagged for review; logos/dividers alone do not
-  automatically trigger failure. Scanned-only reports are rejected. OCR needs a
-  separate future design.
-- Text extraction and mocked pipeline tests cannot establish live AI quality.
-  No credentials/model were configured during implementation, so live accuracy is
-  not claimed. See task status for actual checks.
+Validated findings are grouped by theme and sent to a second consolidation prompt.
+The model proposes specific same-weakness groups and cautious audit implications.
+Python validates all referenced IDs, prevents duplicate groups crossing report or
+agency/system boundaries, and requires every finding to be covered. Python also
+calculates report and agency counts. A weakness is recurrent only when it appears
+in at least two distinct report hashes; the model cannot set this value.
+
+Analysis is a persisted single-worker job. Successful chunks are saved immediately,
+retries reuse them, and changed extraction invalidates dependent consolidation.
+Failures, page warnings and incomplete coverage are surfaced as partial results.
+Exports include findings, insights, coverage and provenance. Mocked tests validate
+the pipeline mechanics, while live model quality and semantic correctness require
+separate benchmark and human evaluation.
+
+## Assumptions
+- All text within PDF can be extracted via PyMuPDF and does not require OCR to process. No important information are embedded in images.
+- All PDF are relatively similar in terms of format.
+
+## Challenges
+- Chunk size and overlapping size decisions
+- Overlap and preceding-page context reduce split findings but cannot guarantee
+  agency attribution across distant pages
+- LLM parsing and extracted insights quality and accuracy
 - SQLite JSON aggregates keep the prototype readable but are unsuitable for large
   datasets or concurrent tenants. The single worker executes model requests serially.
 
 ## Improvements
-Future improvements, after measuring actual failures: human-verified ground truth,
-semantic support checks, better entity normalization and section segmentation,
-OCR for scanned reports, larger-corpus consolidation and a production job system.
+### Model Evaluation
+Require evaluation of model effectiveness in extraction, consolidation and creation of audit insights. It should include accuracy and comprehensiveness of observations extracted. LLM-As-A-Judge with ground truths, or human evaluation can be used in this step.
 
-Implementation references: [LiteLLM structured JSON output](https://docs.litellm.ai/docs/completion/json_mode)
-and [Streamlit PDF viewer](https://docs.streamlit.io/develop/api-reference/media/st.pdf).
+### Comprehensive LLM Gateway
+LLM gateway currently only supports OpenAI models. A proper LLM gateway implementation allows for model agnostic implmentation and less maintenance.
+
+### Indexing and Vector Database Improvement
+Using an embedding model to embed chunks into vector database instead of using SQLite. This allows for further insights to be supported if auditors require, via Retrieval Augemented Generation (RAG), and vastly speeds up retrieval due to vector search.
