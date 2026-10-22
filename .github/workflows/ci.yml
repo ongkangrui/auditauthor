@@ -15,7 +15,7 @@ concurrency:
 defaults:
   run:
     shell: bash
-    working-directory: auditauthor
+    working-directory: .
 
 jobs:
   quality:

@@ -12,6 +12,7 @@
 - [x] Architecture, coding-agent rules, decisions, inventory and README.
 - [x] Candidate benchmark: 25 cases, 32 expected observations, four negative passages.
 - [x] GitHub Actions: tests, lint, Python/dependency/secret scans, weekly security schedule and private-repository billing gate.
+- [x] GitHub Actions commands run from the repository root, matching the checked-out project layout.
 
 ## Validation
 

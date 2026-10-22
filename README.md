@@ -73,33 +73,6 @@ See [architecture and functionality](docs/ARCHITECTURE.md),
 [coding principles](AGENTS.md), [decisions](docs/DECISION_LOG.md),
 [report inventory](docs/SAMPLE_REPORT_INVENTORY.md) and [task status](docs/TASKS.md).
 
-## Solution and AI approach
-
-Process all extractable text in overlapping character windows, retaining physical
-page references and preceding-page context. Context includes headings as source
-text; no heuristic assigns one agency to an entire page. This deliberately favors
-coverage over keyword-only selection. No embeddings or retrieval layer is needed
-for the four-report assessment corpus.
-
-The extraction prompt separates actual weaknesses from good practices and reported
-remediation. It requires nullable agency/system fields, a fixed IT-control taxonomy,
-and exact source excerpts. Pydantic checks shape; deterministic validation checks
-every quote against both the original page and the model's input. Unsupported
-quotations are excluded and make the run partial. This does **not** automatically
-prove the interpretation, agency attribution or stated risk is correct.
-
-Consolidation runs by theme over validated observations. The model proposes specific
-weakness groups and same-report duplicates; code validates references and boundaries,
-prefers detailed findings and calculates distinct-report/agency counts. Recurrence
-means the weakness appears in at least two distinct report hashes. Cross-agency
-themes and repeated agency/system findings are shown separately. Evidence-backed
-audit implications are suggestions for review, not established conclusions.
-
-Requests have timeouts and bounded retries for transient errors or invalid structured
-output. Jobs and successful chunks persist. A failed chunk can be retried without
-rerunning completed chunks; dependent consolidation is recalculated when extraction
-changes. A failed consolidation can be retried using saved extraction. Interrupted
-jobs are marked on backend restart; queued jobs resume automatically.
 
 ## Local development and tests
 
@@ -115,8 +88,7 @@ uv run pytest -q
 uv run ruff check .
 ```
 
-Do not run multiple Uvicorn workers or multiple backend containers against the same
-data volume. Configure local settings in `.env`; environment variables override it.
+Configure local settings in `.env`; environment variables override it.
 Defaults: 20 MB/report, 500 pages/report, 20 reports/analysis, eight queued/running
 jobs, 14,000-character windows with 2,000-character overlap, 120-second model timeout,
 three request attempts. All are backend configuration except the request report cap.
@@ -127,8 +99,7 @@ theme rather than silently truncating evidence.
 ## Continuous integration
 
 The root [GitHub Actions workflow](../.github/workflows/ci.yml) runs on pull
-requests, default-branch pushes and manual dispatch. Weekly security scans run
-Mondays at 09:17 Singapore time. Feature-branch pushes without a pull request
+requests, default-branch pushes and manual dispatch. Feature-branch pushes without a pull request
 create skipped runs; the default branch is detected from GitHub metadata.
 
 - Python 3.11, uv 0.12.3 and locked dependencies; stale lockfiles fail setup.
@@ -154,30 +125,32 @@ uv run --frozen --group security pip-audit --strict --disable-pip --no-deps -r "
 Dependency advisories are visible in the Actions summary and do not block CI.
 Scanner failures and incomplete reports still fail the security job.
 
-## Evaluation
+## Solution and AI approach
 
-[EVALUATION_SET.json](docs/EVALUATION_SET.json) contains 25 source-grounded passage
-cases with 32 expected observations and four negative passages. Labels are
-**agent-reviewed candidates; independent human review remains pending**. Source
-hashes and excerpts are checked by tests. Additional scenarios cover page boundaries,
-agency changes, overview/detail repetition and FY2021/22 without keyword assumptions.
+Process all extractable text in overlapping character windows, retaining physical
+page references and preceding-page context. Context includes headings as source
+text; no heuristic assigns one agency to an entire page. This deliberately favors
+coverage over keyword-only selection.
 
-To run paid, explicit live evaluation after choosing the model:
+The extraction prompt separates actual weaknesses from good practices and reported
+remediation. It requires nullable agency/system fields, a fixed IT-control taxonomy,
+and exact source excerpts. Pydantic checks shape; deterministic validation checks
+every quote against both the original page and the model's input. Unsupported
+quotations are excluded and make the run partial. This does **not** automatically
+prove the interpretation, agency attribution or stated risk is correct.
 
-```powershell
-uv run python tests/evaluation/evaluate.py --live
-# Independently review evaluation-results/review.json:
-# assign matched_expected_id, judge semantically_supported, then set
-# human_review_complete=true only after all cases are reviewed.
-uv run python tests/evaluation/evaluate.py --score evaluation-results/review.json
-```
+Consolidation runs by theme over validated observations. The model proposes specific
+weakness groups and same-report duplicates; code validates references and boundaries,
+prefers detailed findings and calculates distinct-report/agency counts. Recurrence
+means the weakness appears in at least two distinct report hashes. Cross-agency
+themes and repeated agency/system findings are shown separately. Evidence-backed
+audit implications are suggestions for review, not established conclusions.
 
-Targets are finding precision >=90%, recall >=80%, and verified citations for every
-accepted finding. Scoring counts duplicate predictions as false positives; rejected
-citations do not count as accepted findings. Citation validity and semantic support
-are reported separately. Passage-level scoring is not full-report recall or a
-consolidation-quality measurement: review the integration scenarios and the complete
-four-report run independently before claiming those capabilities are accurate.
+Requests have timeouts and bounded retries for transient errors or invalid structured
+output. Jobs and successful chunks persist. A failed chunk can be retried without
+rerunning completed chunks; dependent consolidation is recalculated when extraction
+changes. A failed consolidation can be retried using saved extraction. Interrupted
+jobs are marked on backend restart; queued jobs resume automatically.
 
 ## Assumptions, challenges and limitations
 
@@ -199,6 +172,7 @@ four-report run independently before claiming those capabilities are accurate.
 - SQLite JSON aggregates keep the prototype readable but are unsuitable for large
   datasets or concurrent tenants. The single worker executes model requests serially.
 
+## Improvements
 Future improvements, after measuring actual failures: human-verified ground truth,
 semantic support checks, better entity normalization and section segmentation,
 OCR for scanned reports, larger-corpus consolidation and a production job system.
